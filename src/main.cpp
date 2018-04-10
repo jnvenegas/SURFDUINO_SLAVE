@@ -114,11 +114,9 @@ static void smartDelay(unsigned long ms)
 
 //setup device and application objects
 void setup() {
-  SerialMonitorInterface.begin(9600);
-  while (!SerialMonitorInterface); //This line will block until a serial monitor is opened with TinyScreen+!
-  
-  //**BLE setup
 
+  //**BLE setup
+  
   BLEsetup();
 
   //**GPS setup
@@ -211,17 +209,6 @@ void loop() {
   //copy gps data struct to the buffer used to hold data we send
   //to the master over I2C
   memcpy(buffer,&slvData,sizeof(slvData));
-
-  Serial.println(slvData.dateString);
-  Serial.println(slvData.timeString);
-  Serial.println(slvData.isGpsLocked);
-  Serial.println(slvData.latitude);
-  Serial.println(slvData.longitude);
-  Serial.println(slvData.mph);
-  Serial.println(slvData.bleCmd);
-   Serial.println(sizeof(SlaveDataStruct));
-  Serial.println("----**-----"); 
-
 }
 
 //----------------------------           
