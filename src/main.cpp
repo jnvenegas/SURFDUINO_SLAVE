@@ -4,27 +4,28 @@
 //
 //----------------------------
 #include <Arduino.h>
-#include <Wire.h>
+
 
 //----------------------------
 //
 // I2C
 //
 //----------------------------
-
+#include <Wire.h>
 #include <SlaveData.h>
+static const uint8_t SZ_OF_SLV_DATA = sizeof(SlaveDataStruct);
 
 //slave module I2C address
 #define I2C_SLV_NODE_ADDRESS 79
 //slave Data struct for transfer over I2C
 SlaveDataStruct slvData;
 //buffer to send data to master I2C node
-uint8_t buffer[sizeof(SlaveDataStruct)];
+uint8_t buffer[SZ_OF_SLV_DATA];
 
 //send data to master upon its I2C request
 void onRequest()
 {
-  Wire.write(buffer,sizeof(SlaveDataStruct));
+  Wire.write(buffer,SZ_OF_SLV_DATA);
   slvData.bleCmd ='\0';
 }
 
@@ -178,7 +179,7 @@ void loop() {
   if(gps.date.isValid() && gps.date.isUpdated())
   {
     char sz[32];
-    sprintf(sz, "%02d%02d%02d ", gps.date.year(),gps.date.month(), gps.date.day());
+    sprintf(sz, "%02d%02d%02d ", gps.date.year() % 100, gps.date.month(), gps.date.day());
     strncpy(slvData.dateString,sz,6);
   } 
   if(gps.time.isValid() && gps.time.isUpdated())
@@ -208,7 +209,7 @@ void loop() {
 
   //copy gps data struct to the buffer used to hold data we send
   //to the master over I2C
-  memcpy(buffer,&slvData,sizeof(slvData));
+  memcpy(buffer, &slvData, SZ_OF_SLV_DATA);
 }
 
 //----------------------------           
