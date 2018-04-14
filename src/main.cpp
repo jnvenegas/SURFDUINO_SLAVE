@@ -5,30 +5,6 @@
 //----------------------------
 #include <Arduino.h>
 
-
-//----------------------------
-//
-// I2C
-//
-//----------------------------
-#include <Wire.h>
-#include <SlaveData.h>
-static const uint8_t SZ_OF_SLV_DATA = sizeof(SlaveDataStruct);
-
-//slave module I2C address
-#define I2C_SLV_NODE_ADDRESS 79
-//slave Data struct for transfer over I2C
-SlaveDataStruct slvData;
-//buffer to send data to master I2C node
-uint8_t buffer[SZ_OF_SLV_DATA];
-
-//send data to master upon its I2C request
-void onRequest()
-{
-  Wire.write(buffer,SZ_OF_SLV_DATA);
-  slvData.bleCmd ='\0';
-}
-
 //----------------------------
 //
 // GPS
@@ -94,6 +70,45 @@ uint8_t ble_connection_state = false;
 
 //----------------------------
 //
+// I2C
+//
+//----------------------------
+#include <Wire.h>
+#include <SlaveData.h>
+static const uint8_t SZ_OF_SLV_DATA = sizeof(SlaveDataStruct);
+
+//slave module I2C address
+#define I2C_SLV_NODE_ADDRESS 79
+//slave Data struct for transfer over I2C
+SlaveDataStruct slvData;
+//buffer to send data to master I2C node
+uint8_t buffer[SZ_OF_SLV_DATA];
+//buffer to receive data from master I2C node
+uint8_t bufferInput[100];
+
+//send data to master upon its I2C request
+void onRequest()
+{
+  Wire.write(buffer,SZ_OF_SLV_DATA);
+}
+//process data from master upon its I2C request
+void onReceive(int nBytes)
+{
+      //packet idx
+      uint8_t bufferIdx = 0;
+
+      //loop and send chunks of 20 chars
+      while(Wire.available())
+      { 
+          char c = Wire.read();
+          bufferInput[bufferIdx] = c;
+          bufferIdx++;
+      }
+      bufferInput[bufferIdx] = '\0';
+}
+
+//----------------------------
+//
 // MAIN LOOP AND FUNCTIONS
 //
 //----------------------------
@@ -115,6 +130,8 @@ static void smartDelay(unsigned long ms)
 
 //setup device and application objects
 void setup() {
+
+  Serial.begin(9600);
 
   //**BLE setup
   
@@ -147,33 +164,32 @@ void setup() {
 
   //setup I2C for this node
   Wire.begin(I2C_SLV_NODE_ADDRESS);
-  //master will send us data and we will use this function to store it
+  //master will request data from us using this interupt
   Wire.onRequest(onRequest);
+  //master will send us data and we will use this function to process it
+  Wire.onReceive(onReceive);
 }
 
 void loop() {
-
-  //process GPS stream and poll BLE
-  smartDelay(1000);
     
   //if we have received any data from the phone
   if (ble_rx_buffer_len)
   {
     //see what command the phone has sent
     char cmd = ble_rx_buffer[0];
-      
-      //temporary response to commands which just echos command to phone
-      /*char buf[15];
-      sprintf(buf, "you said %c lud\0", cmd);
-      lib_aci_send_data(PIPE_UART_OVER_BTLE_UART_TX_TX, (uint8_t*)buf, strlen(buf));
-      */
-
     //add our command to our I2C data packet for the master
     slvData.bleCmd = cmd;
     //reset buffer length to 0 so we are ready for the next command
     ble_rx_buffer_len = 0;
   }
- 
+  else
+  {
+    slvData.bleCmd = '*'; 
+  }
+
+  //process GPS stream and poll BLE
+  smartDelay(1000);
+
   //get new valid data in to gps struct container which 
   //is send over I2C to master node
   if(gps.date.isValid() && gps.date.isUpdated())
@@ -210,6 +226,26 @@ void loop() {
   //copy gps data struct to the buffer used to hold data we send
   //to the master over I2C
   memcpy(buffer, &slvData, SZ_OF_SLV_DATA);
+
+  //if received data from master then send it
+  uint8_t dataFromMasterSize = strlen((char*)bufferInput);
+  if(dataFromMasterSize)
+  {
+    uint8_t bytesLeft = dataFromMasterSize;
+    uint8_t bytesSent = 0;
+
+    while(bytesLeft >= 20)
+    {
+      lib_aci_send_data(PIPE_UART_OVER_BTLE_UART_TX_TX, (uint8_t*)bufferInput+bytesSent, 20);
+      bytesLeft -= 20;
+      bytesSent += 20;
+    }
+    if(bytesLeft)
+    {
+      lib_aci_send_data(PIPE_UART_OVER_BTLE_UART_TX_TX, (uint8_t*)bufferInput+bytesSent, bytesLeft);
+    }
+    bufferInput[0] = '\0';
+  }
 }
 
 //----------------------------           
